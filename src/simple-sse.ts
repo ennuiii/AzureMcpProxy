@@ -162,7 +162,7 @@ export class SimpleSSEManager {
       try {
         const mcpRequest = req.body;
         
-        if (!mcpRequest || !mcpRequest.jsonrpc || !mcpRequest.method) {
+        if (!mcpRequest || !mcpRequest.jsonrpc) {
           console.log('❌ Invalid MCP request format');
           return res.status(400).json({
             jsonrpc: '2.0',
@@ -170,6 +170,29 @@ export class SimpleSSEManager {
             error: {
               code: -32600,
               message: 'Invalid Request'
+            }
+          });
+        }
+        
+        // Handle error responses from client (Tobit sometimes sends these)
+        if (mcpRequest.error) {
+          console.log('⚠️ Client sent error response:', mcpRequest.error);
+          // Acknowledge the error
+          return res.json({
+            jsonrpc: '2.0',
+            id: mcpRequest.id,
+            result: { acknowledged: true }
+          });
+        }
+        
+        if (!mcpRequest.method) {
+          console.log('❌ Missing method in MCP request');
+          return res.status(400).json({
+            jsonrpc: '2.0',
+            id: mcpRequest?.id || null,
+            error: {
+              code: -32600,
+              message: 'Missing method'
             }
           });
         }
@@ -186,11 +209,16 @@ export class SimpleSSEManager {
             result: {
               protocolVersion: '2024-11-05',
               capabilities: {
-                tools: {}
+                tools: {},
+                transport: {
+                  name: 'streamable-https',
+                  supported: true
+                }
               },
               serverInfo: {
                 name: 'azure-devops-mcp-simple',
-                version: '1.0.0'
+                version: '1.0.0',
+                transport: 'streamable-https'
               }
             }
           };
@@ -261,6 +289,28 @@ export class SimpleSSEManager {
             jsonrpc: '2.0',
             id: mcpRequest.id,
             result: {}
+          };
+        } else if (mcpRequest.method === 'ping') {
+          // Handle ping requests
+          console.log('🏓 Ping request received');
+          response = {
+            jsonrpc: '2.0',
+            id: mcpRequest.id,
+            result: {
+              timestamp: new Date().toISOString()
+            }
+          };
+        } else if (mcpRequest.method === 'hello') {
+          // Handle hello requests
+          console.log('👋 Hello request received');
+          response = {
+            jsonrpc: '2.0',
+            id: mcpRequest.id,
+            result: {
+              serverName: 'azure-devops-mcp-simple',
+              serverVersion: '1.0.0',
+              transport: 'streamable-https'
+            }
           };
         } else {
           response = {
