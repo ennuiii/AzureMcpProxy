@@ -6,8 +6,7 @@ import { SimpleSSEManager } from './simple-sse';
 // Load environment variables
 dotenv.config();
 
-// Log version info
-console.log('Azure DevOps MCP Server (Simplified for Tobit) - Starting up');
+console.log('Azure DevOps MCP Server (Simple) - Starting up');
 console.log('Starting server...');
 
 // Create the server configuration from environment variables
@@ -57,11 +56,9 @@ async function runServer() {
   const sseManager = new SimpleSSEManager(server, port, host);
   await sseManager.start();
 
-  console.log('Azure DevOps MCP Server running with SSE');
+  console.log('Azure DevOps MCP Server running with Simple SSE');
   console.log(`Server is available at http://${host}:${port}`);
-  console.log(
-    `Connect to http://${host}:${port}/sse to establish an SSE connection`,
-  );
+  console.log(`Connect to http://${host}:${port}/sse to establish an SSE connection`);
 
   // Handle process termination
   process.on('SIGINT', async () => {
