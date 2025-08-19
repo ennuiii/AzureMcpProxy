@@ -179,14 +179,14 @@ export class SimpleSSEManager {
 
     try {
       const witApi = await this.azureConnection.getWorkItemTrackingApi();
-      const queryResult = await witApi.queryByWiql({ query: wiql }, project);
+      const queryResult = await witApi.queryByWiql({ query: wiql });
 
       if (!queryResult.workItems || queryResult.workItems.length === 0) {
         return 'No work items found matching the query.';
       }
 
       const workItemIds = queryResult.workItems.map(wi => wi.id);
-      const workItems = await witApi.getWorkItems(workItemIds, undefined, undefined, undefined, undefined, project);
+      const workItems = await witApi.getWorkItems(workItemIds);
 
       const formattedItems = workItems.map((item: any) => {
         const fields = item.fields || {};
@@ -255,33 +255,16 @@ export class SimpleSSEManager {
     }
 
     try {
-      const searchApi = await this.azureConnection.getSearchApi();
-      
-      const searchRequest = {
-        searchText: searchText,
-        $skip: 0,
-        $top: 50,
-        filters: {} as any
-      };
-
-      if (project) {
-        searchRequest.filters.Project = [project];
-      }
-      if (repository) {
-        searchRequest.filters.Repository = [repository];
-      }
-
-      const searchResults = await searchApi.fetchCodeSearchResults(searchRequest, project);
-
-      if (!searchResults || !searchResults.results || searchResults.results.length === 0) {
-        return 'No code search results found.';
-      }
-
-      const formattedResults = searchResults.results.map((result: any) => {
-        return `- **${result.fileName}** in ${result.repository?.name}\n  Path: ${result.path}\n  Matches: ${result.matches?.length || 0}`;
-      }).join('\n\n');
-
-      return `# Code Search Results (${searchResults.results.length})\n\n${formattedResults}`;
+      // Note: Azure DevOps Node API doesn't have a search API exposed
+      // This would require using the REST API directly
+      // For now, returning a placeholder message
+      return `Code search functionality requires direct REST API implementation.\n` +
+             `Search text: "${searchText}"\n` +
+             `Project: ${project || 'All projects'}\n` +
+             `Repository: ${repository || 'All repositories'}\n\n` +
+             `Note: The Azure DevOps Node API doesn't expose the Search API directly. ` +
+             `To implement this, you would need to make direct REST API calls to:\n` +
+             `POST https://almsearch.dev.azure.com/{organization}/{project}/_apis/search/codesearchresults?api-version=7.1`;
     } catch (error) {
       console.error('❌ Error searching repository code:', error);
       throw new Error(`Failed to search repository code: ${error instanceof Error ? error.message : String(error)}`);
