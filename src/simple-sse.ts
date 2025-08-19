@@ -68,6 +68,226 @@ export class SimpleSSEManager {
     }
   }
 
+  private async listProjectsDirect(): Promise<string> {
+    if (!this.azureConnection) {
+      throw new Error('Azure DevOps connection not initialized');
+    }
+
+    try {
+      const coreApi = await this.azureConnection.getCoreApi();
+      const projects = await coreApi.getProjects();
+
+      if (!projects || projects.length === 0) {
+        return 'No projects found.';
+      }
+
+      const projectList = projects.map((project: any) => {
+        return `- **${project.name}**: ${project.description || 'No description'} (ID: ${project.id})`;
+      }).join('\n');
+
+      return `# Projects (${projects.length})\n\n${projectList}`;
+    } catch (error) {
+      console.error('❌ Error listing projects:', error);
+      throw new Error(`Failed to list projects: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async getProjectDirect(projectId: string): Promise<string> {
+    if (!this.azureConnection) {
+      throw new Error('Azure DevOps connection not initialized');
+    }
+
+    try {
+      const coreApi = await this.azureConnection.getCoreApi();
+      const project = await coreApi.getProject(projectId);
+
+      if (!project) {
+        return `Project ${projectId} not found.`;
+      }
+
+      return `# Project: ${project.name}\n\n` +
+             `**ID**: ${project.id}\n` +
+             `**Description**: ${project.description || 'No description'}\n` +
+             `**State**: ${project.state}\n` +
+             `**Visibility**: ${project.visibility}\n` +
+             `**URL**: ${project.url}`;
+    } catch (error) {
+      console.error('❌ Error getting project:', error);
+      throw new Error(`Failed to get project ${projectId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async createWorkItemDirect(project: string, type: string, title: string, description?: string, assignedTo?: string): Promise<string> {
+    if (!this.azureConnection) {
+      throw new Error('Azure DevOps connection not initialized');
+    }
+
+    try {
+      const witApi = await this.azureConnection.getWorkItemTrackingApi();
+      
+      const patchDocument = [
+        {
+          op: 'add',
+          path: '/fields/System.Title',
+          value: title
+        }
+      ];
+
+      if (description) {
+        patchDocument.push({
+          op: 'add',
+          path: '/fields/System.Description',
+          value: description
+        });
+      }
+
+      if (assignedTo) {
+        patchDocument.push({
+          op: 'add',
+          path: '/fields/System.AssignedTo',
+          value: assignedTo
+        });
+      }
+
+      const workItem = await witApi.createWorkItem(
+        null,
+        patchDocument as any,
+        project,
+        type
+      );
+
+      if (!workItem) {
+        throw new Error('Failed to create work item');
+      }
+
+      return `# Work Item Created: ${workItem.id}\n\n` +
+             `**Title**: ${title}\n` +
+             `**Type**: ${type}\n` +
+             `**Project**: ${project}\n` +
+             `**State**: ${workItem.fields?.['System.State']}\n` +
+             `**URL**: ${workItem._links?.html?.href || 'N/A'}`;
+    } catch (error) {
+      console.error('❌ Error creating work item:', error);
+      throw new Error(`Failed to create work item: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async queryWorkItemsDirect(wiql: string, project?: string): Promise<string> {
+    if (!this.azureConnection) {
+      throw new Error('Azure DevOps connection not initialized');
+    }
+
+    try {
+      const witApi = await this.azureConnection.getWorkItemTrackingApi();
+      const queryResult = await witApi.queryByWiql({ query: wiql }, project);
+
+      if (!queryResult.workItems || queryResult.workItems.length === 0) {
+        return 'No work items found matching the query.';
+      }
+
+      const workItemIds = queryResult.workItems.map(wi => wi.id);
+      const workItems = await witApi.getWorkItems(workItemIds, undefined, undefined, undefined, undefined, project);
+
+      const formattedItems = workItems.map((item: any) => {
+        const fields = item.fields || {};
+        return `- **${item.id}**: ${fields['System.Title']} (${fields['System.State']})`;
+      }).join('\n');
+
+      return `# Query Results (${workItems.length} items)\n\n${formattedItems}`;
+    } catch (error) {
+      console.error('❌ Error querying work items:', error);
+      throw new Error(`Failed to query work items: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async listRepositoriesDirect(project?: string): Promise<string> {
+    if (!this.azureConnection) {
+      throw new Error('Azure DevOps connection not initialized');
+    }
+
+    try {
+      const gitApi = await this.azureConnection.getGitApi();
+      const repositories = await gitApi.getRepositories(project);
+
+      if (!repositories || repositories.length === 0) {
+        return 'No repositories found.';
+      }
+
+      const repoList = repositories.map((repo: any) => {
+        return `- **${repo.name}**: ${repo.defaultBranch || 'No default branch'} (ID: ${repo.id})`;
+      }).join('\n');
+
+      return `# Repositories (${repositories.length})\n\n${repoList}`;
+    } catch (error) {
+      console.error('❌ Error listing repositories:', error);
+      throw new Error(`Failed to list repositories: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async getRepositoryDirect(repositoryId: string, project?: string): Promise<string> {
+    if (!this.azureConnection) {
+      throw new Error('Azure DevOps connection not initialized');
+    }
+
+    try {
+      const gitApi = await this.azureConnection.getGitApi();
+      const repository = await gitApi.getRepository(repositoryId, project);
+
+      if (!repository) {
+        return `Repository ${repositoryId} not found.`;
+      }
+
+      return `# Repository: ${repository.name}\n\n` +
+             `**ID**: ${repository.id}\n` +
+             `**Default Branch**: ${repository.defaultBranch || 'Not set'}\n` +
+             `**Size**: ${repository.size || 'Unknown'} bytes\n` +
+             `**URL**: ${repository.webUrl || repository.remoteUrl || 'N/A'}\n` +
+             `**Project**: ${repository.project?.name || 'Unknown'}`;
+    } catch (error) {
+      console.error('❌ Error getting repository:', error);
+      throw new Error(`Failed to get repository ${repositoryId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async searchRepositoryCodeDirect(searchText: string, project?: string, repository?: string): Promise<string> {
+    if (!this.azureConnection) {
+      throw new Error('Azure DevOps connection not initialized');
+    }
+
+    try {
+      const searchApi = await this.azureConnection.getSearchApi();
+      
+      const searchRequest = {
+        searchText: searchText,
+        $skip: 0,
+        $top: 50,
+        filters: {} as any
+      };
+
+      if (project) {
+        searchRequest.filters.Project = [project];
+      }
+      if (repository) {
+        searchRequest.filters.Repository = [repository];
+      }
+
+      const searchResults = await searchApi.fetchCodeSearchResults(searchRequest, project);
+
+      if (!searchResults || !searchResults.results || searchResults.results.length === 0) {
+        return 'No code search results found.';
+      }
+
+      const formattedResults = searchResults.results.map((result: any) => {
+        return `- **${result.fileName}** in ${result.repository?.name}\n  Path: ${result.path}\n  Matches: ${result.matches?.length || 0}`;
+      }).join('\n\n');
+
+      return `# Code Search Results (${searchResults.results.length})\n\n${formattedResults}`;
+    } catch (error) {
+      console.error('❌ Error searching repository code:', error);
+      throw new Error(`Failed to search repository code: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   private setupRoutes(): void {
     // Request logging middleware
     this.app.use((req: Request, res: Response, next) => {
@@ -239,6 +459,87 @@ export class SimpleSSEManager {
                     },
                     required: ['workItemId']
                   }
+                },
+                {
+                  name: 'list_projects',
+                  description: 'List all projects in Azure DevOps',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {}
+                  }
+                },
+                {
+                  name: 'get_project',
+                  description: 'Get details of a specific project',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      projectId: { type: 'string', description: 'Project ID or name' }
+                    },
+                    required: ['projectId']
+                  }
+                },
+                {
+                  name: 'create_work_item',
+                  description: 'Create a new work item',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      project: { type: 'string', description: 'Project name or ID' },
+                      type: { type: 'string', description: 'Work item type (e.g., Task, Bug, User Story)' },
+                      title: { type: 'string', description: 'Work item title' },
+                      description: { type: 'string', description: 'Work item description (optional)' },
+                      assignedTo: { type: 'string', description: 'Assigned to user email (optional)' }
+                    },
+                    required: ['project', 'type', 'title']
+                  }
+                },
+                {
+                  name: 'query_work_items',
+                  description: 'Query work items using WIQL',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      wiql: { type: 'string', description: 'WIQL query string' },
+                      project: { type: 'string', description: 'Project name or ID (optional)' }
+                    },
+                    required: ['wiql']
+                  }
+                },
+                {
+                  name: 'list_repositories',
+                  description: 'List all repositories',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      project: { type: 'string', description: 'Project name or ID (optional)' }
+                    }
+                  }
+                },
+                {
+                  name: 'get_repository',
+                  description: 'Get details of a specific repository',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      repositoryId: { type: 'string', description: 'Repository ID or name' },
+                      project: { type: 'string', description: 'Project name or ID (optional)' }
+                    },
+                    required: ['repositoryId']
+                  }
+                },
+                {
+                  name: 'search_repository_code',
+                  description: 'Search for code in repositories',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      searchText: { type: 'string', description: 'Search text' },
+                      project: { type: 'string', description: 'Project name or ID (optional)' },
+                      repository: { type: 'string', description: 'Repository name or ID (optional)' }
+                    },
+                    required: ['searchText']
+                  }
                 }
               ]
             }
@@ -248,28 +549,85 @@ export class SimpleSSEManager {
           console.log(`🎯 Tool call: ${mcpRequest.params?.name} with args:`, mcpRequest.params?.arguments);
           
           try {
-            // Direct Azure DevOps API call for get_work_item
-            if (mcpRequest.params?.name === 'get_work_item') {
-              const workItemId = mcpRequest.params?.arguments?.workItemId;
-              if (!workItemId) {
-                throw new Error('workItemId is required');
-              }
-              
-              // Make direct Azure DevOps API call
-              const result = await this.getWorkItemDirect(workItemId);
-              response = {
-                jsonrpc: '2.0',
-                id: mcpRequest.id,
-                result: {
-                  content: [{
-                    type: 'text',
-                    text: result
-                  }]
+            let result: string;
+            const toolName = mcpRequest.params?.name;
+            const args = mcpRequest.params?.arguments || {};
+
+            switch (toolName) {
+              case 'get_work_item':
+                if (!args.workItemId) {
+                  throw new Error('workItemId is required');
                 }
-              };
-            } else {
-              throw new Error(`Tool ${mcpRequest.params?.name} not supported`);
+                result = await this.getWorkItemDirect(args.workItemId);
+                break;
+
+              case 'list_projects':
+                result = await this.listProjectsDirect();
+                break;
+
+              case 'get_project':
+                if (!args.projectId) {
+                  throw new Error('projectId is required');
+                }
+                result = await this.getProjectDirect(args.projectId);
+                break;
+
+              case 'create_work_item':
+                if (!args.project || !args.type || !args.title) {
+                  throw new Error('project, type, and title are required');
+                }
+                result = await this.createWorkItemDirect(
+                  args.project,
+                  args.type,
+                  args.title,
+                  args.description,
+                  args.assignedTo
+                );
+                break;
+
+              case 'query_work_items':
+                if (!args.wiql) {
+                  throw new Error('wiql is required');
+                }
+                result = await this.queryWorkItemsDirect(args.wiql, args.project);
+                break;
+
+              case 'list_repositories':
+                result = await this.listRepositoriesDirect(args.project);
+                break;
+
+              case 'get_repository':
+                if (!args.repositoryId) {
+                  throw new Error('repositoryId is required');
+                }
+                result = await this.getRepositoryDirect(args.repositoryId, args.project);
+                break;
+
+              case 'search_repository_code':
+                if (!args.searchText) {
+                  throw new Error('searchText is required');
+                }
+                result = await this.searchRepositoryCodeDirect(
+                  args.searchText,
+                  args.project,
+                  args.repository
+                );
+                break;
+
+              default:
+                throw new Error(`Tool ${toolName} not supported`);
             }
+
+            response = {
+              jsonrpc: '2.0',
+              id: mcpRequest.id,
+              result: {
+                content: [{
+                  type: 'text',
+                  text: result
+                }]
+              }
+            };
           } catch (error) {
             console.error('❌ Error executing tool:', error);
             response = {
@@ -347,7 +705,16 @@ export class SimpleSSEManager {
           health: '/health',
           sse: '/sse'
         },
-        tools: ['get_work_item'],
+        tools: [
+          'get_work_item',
+          'list_projects',
+          'get_project', 
+          'create_work_item',
+          'query_work_items',
+          'list_repositories',
+          'get_repository',
+          'search_repository_code'
+        ],
         timestamp: new Date().toISOString()
       });
     });
